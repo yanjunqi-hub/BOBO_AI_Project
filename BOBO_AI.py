@@ -23,11 +23,14 @@ def main():
             logout()
         st.sidebar.markdown("---")
         # 选择功能
-        page = st.sidebar.selectbox("选择一个功能", ["计算并生成3D堆码图"], key="page_selector")
+        page = st.sidebar.selectbox("选择一个功能", ["计算并生成3D堆码图", "纸箱堆叠助手"], key="page_selector")
         
         if page == "计算并生成3D堆码图":
             # 调用纸箱堆码计算功能
             app_pages.render_carton_stacking()
+        if page == "纸箱堆叠助手":
+            # 调用纸箱堆叠助手功能
+            app_pages.render_stacking_assistant()
     else:
         st.sidebar.write("请先登录")
         username = st.text_input("用户名")
