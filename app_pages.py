@@ -34,72 +34,108 @@ def render_carton_stacking():
         fig = generate_3d_plot(max_cartons_length, max_cartons_width, max_layers, carton_length, carton_width, carton_height)
         st.pyplot(fig)
 
-
 def render_stacking_assistant():
     st.markdown("<h1 class='big-header'>📦 智能纸箱堆叠助手</h1>", unsafe_allow_html=True)
     
     # 初始化堆叠系统
     if 'stack_sys' not in st.session_state:
         st.session_state.stack_sys = StackSystem()
-    
+
+    # 初始化纸箱规格字典
+    if 'box_specs' not in st.session_state:
+        st.session_state.box_specs = {}  # 存储纸箱规格
+
+    # 确保 display_mode 被初始化
+    if 'display_mode' not in st.session_state:
+        st.session_state.display_mode = '实心'  # 默认值为实心
+
     # ===== 左侧控制面板 =====
     with st.sidebar:
         st.header("操作面板")
         
-        # 新建纸箱输入
-        with st.expander("➕ 添加新纸箱", expanded=True):
-            new_size = [
-                st.number_input("长度 (mm)", min_value=1, value=200, key='new_len'),
-                st.number_input("宽度 (mm)", min_value=1, value=150, key='new_wid'),
-                st.number_input("高度 (mm)", min_value=1, value=100, key='new_hei')
+        # 设置纸箱规格
+        with st.expander("📌 纸箱规格设置", expanded=True):
+            spec_name = st.text_input("纸箱规格名称", value="A")  # 纸箱规格名称
+            spec_size = [
+                st.number_input("长度 (mm)", min_value=1, value=200, key='spec_len'),
+                st.number_input("宽度 (mm)", min_value=1, value=150, key='spec_wid'),
+                st.number_input("高度 (mm)", min_value=1, value=100, key='spec_hei')
             ]
-            if st.button("添加纸箱"):
-                st.session_state.stack_sys.add_box(new_size)
-                st.experimental_rerun()  # 添加新纸箱后刷新页面
+            z_cut_count = st.number_input("切割块数", min_value=1, value=1, step=1)  # 新增切割块数
+            if st.button("添加规格"):
+                st.session_state.box_specs[spec_name] = {"size": spec_size, "z_cut_count": z_cut_count}  # 存储规格和切割块数
+                st.success(f"已添加纸箱规格：{spec_name} ({spec_size[0]}×{spec_size[1]}×{spec_size[2]}) 切割块数：{z_cut_count}")
 
-        # 删除纸箱操作界面
+        # 添加新纸箱
+        with st.expander("➕ 添加新纸箱", expanded=True):
+            if len(st.session_state.box_specs) > 0:
+                selected_spec = st.selectbox("选择纸箱规格", list(st.session_state.box_specs.keys()))
+                box_size = st.session_state.box_specs[selected_spec]["size"]  # 获取规格的尺寸
+                z_cut_count = st.session_state.box_specs[selected_spec]["z_cut_count"]  # 获取切割块数
+                box_index = st.number_input("纸箱序号", min_value=1, value=1, step=1)
+                new_name = f"{selected_spec}_{box_index}"  # 自动生成纸箱名称
+                if st.button("添加纸箱"):
+                    st.session_state.stack_sys.add_box(box_size, new_name, z_cut_count)  # 添加纸箱，并考虑切割块数
+                    st.experimental_rerun()  # 刷新页面
+
+            else:
+                st.warning("请先添加纸箱规格")
+                
+        # 删除纸箱
         with st.expander("❌ 删除纸箱", expanded=False):
             if len(st.session_state.stack_sys.boxes) > 0:
-                box_to_delete = st.selectbox("选择要删除的纸箱", range(len(st.session_state.stack_sys.boxes)), format_func=lambda x: f"Box {x+1}")
+                box_names = [box.name for box in st.session_state.stack_sys.boxes]
+                box_to_delete = st.selectbox("选择要删除的纸箱", box_names, key="delete_box_select")
+                
                 if st.button("删除纸箱"):
+                    # 找到并删除匹配名称的纸箱
                     st.session_state.stack_sys.remove_box(box_to_delete)
-                    st.experimental_rerun()  # 删除纸箱后刷新页面
+                    st.experimental_rerun()  # 刷新页面
             else:
                 st.warning("没有可删除的纸箱")
-        
+
         # 堆叠操作界面
         with st.expander("🔗 堆叠操作", expanded=True):
-            if len(st.session_state.stack_sys.boxes) >= 2:
-                box1 = st.selectbox("基础纸箱", 
-                                  options=range(len(st.session_state.stack_sys.boxes)),
-                                  format_func=lambda x: f"Box {x+1}")
-                box2 = st.selectbox("目标纸箱",
-                                  options=range(len(st.session_state.stack_sys.boxes)),
-                                  format_func=lambda x: f"Box {x+1}")
-                axis = st.radio("堆叠方向", ['X轴', 'Y轴', 'Z轴'], index=2)
-                offset = st.number_input("间距 (mm)", min_value=0, value=10)
+            if len(st.session_state.stack_sys.boxes) >= 1:
+                box_names = [box.name for box in st.session_state.stack_sys.boxes]
+                box = st.selectbox("选择目标纸箱", box_names, key="box_select")
+                
+                # 输入目标坐标
+                target_position = (
+                    st.number_input("目标 X 坐标 (mm)", value=0, key="target_x"),
+                    st.number_input("目标 Y 坐标 (mm)", value=0, key="target_y"),
+                    st.number_input("目标 Z 坐标 (mm)", value=0, key="target_z")
+                )
                 
                 if st.button("执行堆叠"):
-                    st.session_state.stack_sys.stack_boxes(
-                        box1, box2,
-                        axis=axis[0].lower(),
-                        offset=offset
+                    # 找到对应的纸箱
+                    box_idx = next(i for i, b in enumerate(st.session_state.stack_sys.boxes) if b.name == box)
+                    
+                    # 执行堆叠操作，将纸箱放置到目标坐标
+                    st.session_state.stack_sys.stack_box_to_position(
+                        box_idx, target_position
                     )
-                    st.experimental_rerun()  # 堆叠后刷新页面
+                    st.experimental_rerun()  # 刷新页面
             else:
-                st.warning("需要至少两个纸箱进行操作")
-                
-        # 系统控制
+                st.warning("需要至少一个纸箱进行操作")
+
+        # 设置显示模式
+        with st.expander("🎨 显示方式", expanded=False):
+            display_mode = st.radio("选择纸箱显示方式", ['实心', '空心'], index=0, key="display_mode")
+            if st.session_state.display_mode != display_mode:
+                st.session_state.display_mode = display_mode
+
+        # 重置系统
         with st.expander("⚙️ 系统设置", expanded=False):
             if st.button("🔄 重置系统"):
                 st.session_state.stack_sys = StackSystem()
-                st.experimental_rerun()
-    
+                st.session_state.box_specs = {}
+                st.experimental_rerun()  # 刷新页面
+
     # ===== 主显示区域 =====
     st.subheader("三维堆叠视图")
     if len(st.session_state.stack_sys.boxes) > 0:
-        # 重新渲染图表以反映删除后的变化
-        fig = st.session_state.stack_sys.visualize()
+        fig = st.session_state.stack_sys.visualize(is_solid=(st.session_state.display_mode == '实心'))
         st.plotly_chart(fig)
         
         # 显示纸箱信息表
@@ -107,7 +143,7 @@ def render_stacking_assistant():
         box_table = []
         for i, box in enumerate(st.session_state.stack_sys.boxes):
             box_table.append({
-                "编号": f"Box {i+1}",
+                "编号": box.name,
                 "位置 (mm)": f"{box.position[0]:.1f}, {box.position[1]:.1f}, {box.position[2]:.1f}",
                 "尺寸 (L×W×H)": f"{box.size[0]}×{box.size[1]}×{box.size[2]}",
                 "颜色标识": f"<div style='background-color: rgba{box.color}; width: 20px; height: 20px;'></div>"
@@ -117,9 +153,4 @@ def render_stacking_assistant():
             unsafe_allow_html=True
         )
     else:
-        st.info("请先添加纸箱开始设计")
-
-
-
-
-
+        st.info("请先添加纸箱")
